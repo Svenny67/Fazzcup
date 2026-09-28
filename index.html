@@ -1,0 +1,198 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fazzcup Tournaments</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{--bg:#f3f5fa;--card:#fff;--tx:#1b2033;--mu:#6b7390;--bd:#dfe3ef;--ac:#e3350d;--sh:0 2px 10px #0001}
+[data-theme=dark]{--bg:#12151f;--card:#1c2130;--tx:#e9ecf5;--mu:#98a0bb;--bd:#2c3348;--sh:0 2px 10px #0006}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx);transition:background .3s}
+nav{position:sticky;top:0;z-index:5;display:flex;gap:6px;align-items:center;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--bd)}
+nav b{font-size:18px;color:var(--ac);margin-right:auto}nav a{padding:6px 12px;border-radius:8px;color:var(--tx);text-decoration:none}nav a:hover,nav a.on{background:var(--bg)}
+main{max-width:1200px;margin:auto;padding:16px}h1{margin:.2em 0}
+button,select,input,textarea{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:7px 11px}
+button{cursor:pointer;transition:.15s}button:hover{transform:translateY(-1px)}.pri{background:var(--ac);color:#fff;border:0}.ghost{background:transparent}.dng{color:#d22}
+.tools,.row{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0;align-items:center}.tools input{flex:1;min-width:160px}
+.fp{display:none;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:10px}.fp.open{display:block}
+.fp h4{margin:12px 0 6px;color:var(--mu);font-size:12px;text-transform:uppercase}.fp h4:first-child{margin-top:0}
+.chip{border-radius:20px;padding:4px 11px;margin:2px;font-size:13px;background:var(--bg)}.chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.fp input[type=number]{width:70px;padding:4px 6px}.st{display:grid;grid-template-columns:50px auto auto;gap:4px 8px;align-items:center;max-width:260px}
+.cnt{color:var(--mu);margin:6px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.card{position:relative;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:10px;text-align:center;box-shadow:var(--sh);border-top:4px solid var(--c);animation:pop .3s;transition:.2s}
+.card:hover{transform:translateY(-3px)}.card img{width:112px;height:112px;object-fit:contain}.card small{display:block;color:var(--mu)}.card b{display:block}
+.grid.pick .card{cursor:pointer}.card.out{opacity:.4}.card.in::after{content:"✓";position:absolute;top:6px;right:9px;color:#2a9d3a;font-weight:700}
+.tp{display:inline-block;color:#fff;font-size:11px;padding:1px 8px;border-radius:10px;margin:2px;text-transform:capitalize}
+.cups{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.cup{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;box-shadow:var(--sh);animation:pop .3s}.cup h3{margin:0 0 4px}.cup p{color:var(--mu);min-height:38px}
+.big{font-size:20px;font-weight:600;width:100%}textarea{width:100%;resize:vertical}
+@keyframes pop{from{opacity:0;transform:scale(.96)}}
+</style></head><body>
+<nav><b>⚡ Fazzcup Tournaments</b><a href="#/" id="n1">Cups</a><a href="#/dex" id="n2">Pokédex</a><button class="ghost" id="th">🌓</button></nav>
+<main id="app"><p>Loading Pokédex… (first load downloads all Pokémon, later loads are instant)</p></main>
+<script>
+const TYPES=['normal','fire','water','electric','grass','ice','fighting','poison','ground','flying','psychic','bug','rock','ghost','dragon','dark','steel','fairy'];
+const TC={normal:'#a8a77a',fire:'#ee8130',water:'#6390f0',electric:'#f7b500',grass:'#7ac74c',ice:'#7cc9c5',fighting:'#c22e28',poison:'#a33ea1',ground:'#c9a44a',flying:'#a98ff3',psychic:'#f95587',bug:'#a6b91a',rock:'#b6a136',ghost:'#735797',dragon:'#6f35fc',dark:'#705746',steel:'#9a9ab8',fairy:'#d685ad'};
+const STATS=['hp','attack','defense','special-attack','special-defense','speed'],SL=['HP','Atk','Def','SpA','SpD','Spe'];
+const $=(s,e=document)=>e.querySelector(s),cap=s=>s.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+const IMG=id=>`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+let DEX=[],BY={};
+// ---------- data ----------
+async function loadDex(){
+ try{const c=localStorage.getItem('pcb-dex1');if(c){DEX=JSON.parse(c);return}}catch(e){}
+ const q=`{pokemon_v2_pokemon(order_by:{id:asc}){id name is_default pokemon_v2_pokemonstats{base_stat pokemon_v2_stat{name}} pokemon_v2_pokemontypes{pokemon_v2_type{name}} pokemon_v2_pokemonabilities{pokemon_v2_ability{name}} pokemon_v2_pokemonspecy{id generation_id is_legendary is_mythical evolves_from_species_id}}}`;
+ const r=await fetch('https://beta.pokeapi.co/graphql/v1beta',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
+ const raw=(await r.json()).data.pokemon_v2_pokemon;
+ const kids=new Set(raw.map(p=>p.pokemon_v2_pokemonspecy.evolves_from_species_id).filter(Boolean));
+ DEX=raw.map(p=>{const s=p.pokemon_v2_pokemonspecy,st={};p.pokemon_v2_pokemonstats.forEach(x=>st[x.pokemon_v2_stat.name]=x.base_stat);
+  const par=!!s.evolves_from_species_id,ch=kids.has(s.id),sv=STATS.map(k=>st[k]||0);
+  return{id:p.id,n:p.name,dex:s.id,t:p.pokemon_v2_pokemontypes.map(x=>x.pokemon_v2_type.name),a:p.pokemon_v2_pokemonabilities.map(x=>x.pokemon_v2_ability.name),s:sv,bst:sv.reduce((a,b)=>a+b,0),g:s.generation_id,L:s.is_legendary||s.is_mythical,f:!p.is_default,st:par?(ch?'middle':'final'):(ch?'first':'none')}});
+ try{localStorage.setItem('pcb-dex1',JSON.stringify(DEX))}catch(e){}
+}
+const LIST="3,3M,6,6MX,6MY,9,9M,15,15M,18,18M,24,25,26,26MX,26MY,26,36,36M,38,38,40,45,53,53,59,59,65,65M,68,71,71M,80,80M,80,83,94,94M,115,115M,121,121M,122,127,127M,128,128,130,130M,132,134,135,136,142,142M,143,149,149M,154,154M,157,157,160,160M,168,181,181M,184,186,196,197,199,199,205,208,208M,211,212,212M,214,214M,227,227M,229,229M,248,248M,254,254M,257,257M,260,260M,279,282,282M,302,302M,303,303M,306,306M,308,308M,310,310M,317,319,319M,323,323M,324,334,334M,350,351,354,354M,358,358M,359,359M,359MZ,362,362M,373,373M,376,376M,389,392,395,398,398M,405,407,409,411,428,428M,442,445,445M,445MZ,448,448M,448MZ,450,454,460,460M,461,464,470,471,472,473,475,475M,478,478M,479,497,500,500M,503,503,505,510,512,514,516,518,530,530M,531,531M,534,545,545M,547,553,560,560M,563,569,571,571,579,584,587,604,604M,609,609M,614,618,618,623,623M,635,637,652,652M,655,655M,658,658M,660,663,666,668,668M,670,670M,671,673,675,676,678,678M,681,683,685,687,687M,689,689M,691,691M,693,695,697,699,700,701,701M,702,706,706,707,709,711,713,713,715,724,724,727,730,733,740,740M,745,748,750,752,758,763,765,766,768,768M,778,780,780M,784,812,815,818,823,828,841,842,844,849,853,855,858,861,863,865,866,867,869,870,870M,871,876,877,887,899,900,902,903,904,908,911,914,923,925,930,931,934,936,937,939,943,952,952M,956,959,964,968,970,970M,972,979,981,983,998,998M,1000,1013,1018,1019";
+const REG={26:'alola',38:'alola',53:'alola',59:'hisui',80:'galar',128:'paldea',157:'hisui',199:'galar',503:'hisui',571:'hisui',618:'galar',706:'hisui',713:'hisui',724:'hisui'};
+const nm=p=>{const m=p.n.match(/^(.*)-mega(?:-([xyz]))?$/);return m?'Mega '+cap(m[1])+(m[2]?' '+m[2].toUpperCase():''):cap(p.n)};
+function restrict(full){const done=new Set(),out=[];
+ LIST.split(',').forEach(t=>{const m=t.match(/^(\d+)(M[XYZ]?)?$/),d=+m[1];
+  if(done.has(d))return;done.add(d);
+  full.filter(p=>p.dex===d&&!/-gmax$/.test(p.n)&&!/-totem/.test(p.n)&&!(d===25&&p.n!=='pikachu')).forEach(p=>out.push(p))});return out}
+// ---------- filter rules (add new rules here) ----------
+const defF=()=>({types:[],gens:[],bmin:0,bmax:999,smin:[0,0,0,0,0,0],smax:[255,255,255,255,255,255],ab:'',stages:[],leg:'any',forms:'all'});
+const RULES=[
+ (p,f)=>!f.types.length||p.t.some(t=>f.types.includes(t)),
+ (p,f)=>!f.gens.length||f.gens.includes(p.g),
+ (p,f)=>p.bst>=f.bmin&&p.bst<=f.bmax,
+ (p,f)=>p.s.every((v,i)=>v>=f.smin[i]&&v<=f.smax[i]),
+ (p,f)=>!f.ab||p.a.some(a=>a.includes(f.ab.trim().toLowerCase().replace(/ /g,'-'))),
+ (p,f)=>!f.stages.length||f.stages.includes(p.st),
+ (p,f)=>f.leg==='any'||(f.leg==='exclude'?!p.L:p.L),
+ (p,f)=>!p.f||f.forms==='all'||(f.forms==='mega'&&/-mega/.test(p.n)),
+];
+const matcher=cup=>{if(cup.fixed)return p=>cup.fixed.includes(p.id);const i=new Set(cup.inc||[]),e=new Set(cup.ex||[]);return p=>!e.has(p.id)&&(i.has(p.id)||RULES.every(r=>r(p,cup.f)))};
+// ---------- cups storage ----------
+const uid=()=>Math.random().toString(36).slice(2,9);
+function mk(name,desc,o={}){const c={id:uid(),name,desc,f:{...defF(),...o},inc:[],ex:[]};c.orig=JSON.stringify({name,desc,f:c.f,inc:[],ex:[]});return c}
+let cups=JSON.parse(localStorage.getItem('fzc-cups')||'null')||[
+ mk('Grass Cup','Only Grass-type Pokémon.',{types:['grass']}),
+ mk('Little Cup','First-stage Pokémon that can still evolve (non-legendary).',{stages:['first'],leg:'exclude',forms:'base'}),
+ mk('Under 500 BST','Base stat total below 500.',{bmax:499}),
+ mk('Fire Cup','Only Fire-type Pokémon.',{types:['fire']}),
+ mk('Speed Cup','Base Speed of at least 100.',{smin:[0,0,0,0,0,100]})];
+const save=()=>localStorage.setItem('fzc-cups',JSON.stringify(cups));
+// ---------- UI helpers ----------
+const tpl=p=>`<span class=tp style="background:${TC[p]}">${p}</span>`;
+const ROM=['I','II','III','IV','V','VI','VII','VIII','IX'];
+function filterPanel(el,f,onChange){
+ const chips=(k,arr,lab)=>arr.map((v,i)=>`<button class="chip ${f[k].includes(v)?'on':''}" data-k=${k} data-v="${v}">${lab?lab[i]:cap(v)}</button>`).join('');
+ el.innerHTML=`<h4>Type (any of selected)</h4>${chips('types',TYPES)}<h4>Generation</h4>${chips('gens',[1,2,3,4,5,6,7,8,9],ROM)}
+ <h4>Base stat total</h4>Min <input type=number data-n=bmin value=${f.bmin}> Max <input type=number data-n=bmax value=${f.bmax}>
+ <h4>Individual stats (min / max)</h4><div class=st>${SL.map((l,i)=>`<span>${l}</span><input type=number data-n=smin data-i=${i} value=${f.smin[i]}><input type=number data-n=smax data-i=${i} value=${f.smax[i]}>`).join('')}</div>
+ <h4>Ability</h4><input data-n=ab list=abl placeholder="e.g. levitate" value="${f.ab}"><datalist id=abl>${[...new Set(DEX.flatMap(p=>p.a))].sort().map(a=>`<option value="${a}">`).join('')}</datalist>
+ <h4>Evolution stage</h4>${chips('stages',['first','middle','final','none'],['First stage','Middle stage','Final stage','Does not evolve'])}
+ <h4>Legendary / Mythical</h4><select data-n=leg><option value=any>Include</option><option value=exclude>Exclude</option><option value=only>Only</option></select>
+ <h4>Mega Evolutions &amp; forms</h4><select data-n=forms><option value=base>Base forms only</option><option value=mega>Include Megas</option><option value=all>Include all forms</option></select>
+ <div class=row><button class=ghost data-clr>Clear filters</button></div>`;
+ el.querySelector('[data-n=leg]').value=f.leg;el.querySelector('[data-n=forms]').value=f.forms;
+ el.onclick=e=>{const b=e.target.closest('[data-k]');if(b){const a=f[b.dataset.k],v=b.dataset.k==='gens'?+b.dataset.v:b.dataset.v,i=a.indexOf(v);i<0?a.push(v):a.splice(i,1);b.classList.toggle('on');onChange()}
+  if(e.target.dataset.clr!==undefined){Object.assign(f,defF());filterPanel(el,f,onChange);onChange()}};
+ el.oninput=el.onchange=e=>{const t=e.target,n=t.dataset.n;if(!n)return;
+  if(n==='smin'||n==='smax')f[n][+t.dataset.i]=t.value===''?(n==='smin'?0:255):+t.value;
+  else if(n==='bmin'||n==='bmax')f[n]=t.value===''?(n==='bmin'?0:999):+t.value;else f[n]=t.value;onChange()};
+}
+const SORT={dex:(a,b)=>a.dex-b.dex||a.id-b.id,name:(a,b)=>a.n.localeCompare(b.n),bh:(a,b)=>b.bst-a.bst,bl:(a,b)=>a.bst-b.bst,sh:(a,b)=>b.s[5]-a.s[5],sl:(a,b)=>a.s[5]-b.s[5]};
+function browser(root,cup){
+ let q='',sort='dex',lim=120,mode='cup';
+ root.innerHTML=`<div class=tools><input id=q placeholder="Search name or Pokédex number…"><select id=so><option value=dex>Pokédex #</option><option value=name>A–Z</option><option value=bh>BST high→low</option><option value=bl>BST low→high</option><option value=sh>Speed high→low</option><option value=sl>Speed low→high</option></select>
+ ${cup.pickable?`<select id=md><option value=cup>Show: cup Pokémon</option><option value=all>Show: all (click to add/remove)</option></select><button id=eqA style="display:none">Equip all</button><button id=eqN style="display:none">Unequip all</button>`:''}${cup.fixed?'':'<button id=fb>Filters ▾</button>'}<button id=xl>⬇ Excel</button><button id=pf>⬇ PDF</button></div>${cup.fixed?'':'<div class=fp id=fp></div>'}<div class=cnt id=cnt></div><div class=grid id=grid></div><div class=row><button id=more class=ghost>Load more</button></div>`;
+ const ok0=()=>matcher(cup);
+ function draw(){
+  const ok=ok0(),qq=q.toLowerCase().trim().replace(/^#/,'');
+  const base=DEX.filter(p=>!qq||p.n.includes(qq.replace(/ /g,'-'))||String(p.dex)===qq);
+  const all=cup.pickable&&mode==='all',list=(all?base:base.filter(ok)).sort(SORT[sort]);
+  $('#cnt',root).textContent=`${DEX.filter(ok).length} Pokémon in this ${cup.pickable?'cup':'filter'} · showing ${list.length}`;
+  const g=$('#grid',root);g.classList.toggle('pick',!!cup.pickable);
+  g.innerHTML=list.slice(0,lim).map(p=>`<div class="card ${all?(ok(p)?'in':'out'):''}" data-id=${p.id} style="--c:${TC[p.t[0]]}"><img loading=lazy alt="" src="${IMG(p.img||p.id)}" onerror="this.style.opacity=.15"><b>${nm(p)}${p.est?'*':''}</b><small>#${String(p.dex).padStart(4,'0')}</small>${p.t.map(tpl).join('')}<small>BST ${p.bst}</small></div>`).join('')||'<p>No Pokémon match.</p>';
+  $('#more',root).style.display=list.length>lim?'':'none';
+  if(cup.pickable){$('#eqA',root).style.display=$('#eqN',root).style.display=mode==='all'?'':'none'}
+  root._list=list;
+ }
+ const change=()=>{lim=120;draw();cup.onchange&&cup.onchange()};
+ if(!cup.fixed){filterPanel($('#fp',root),cup.f,change);$('#fb',root).onclick=()=>$('#fp',root).classList.toggle('open')}
+ $('#q',root).oninput=e=>{q=e.target.value;lim=120;draw()};
+ $('#so',root).onchange=e=>{sort=e.target.value;draw()};
+ $('#more',root).onclick=()=>{lim+=120;draw()};
+ const title=cup.name||'Pokedex',fn=title.replace(/\W+/g,'-');
+ const dataList=()=>DEX.filter(ok0()).sort(SORT[sort]);
+ const toDataURL=url=>fetch(url).then(r=>r.blob()).then(b=>new Promise((res,rej)=>{const r2=new FileReader();r2.onload=()=>res(r2.result);r2.onerror=rej;r2.readAsDataURL(b)}));
+ async function busy(btn,label,fn){const t=btn.textContent;btn.textContent=label;btn.disabled=true;try{await fn()}catch(e){alert('Export failed: '+e.message)}btn.textContent=t;btn.disabled=false}
+ $('#xl',root).onclick=()=>busy($('#xl',root),'Generating…',async()=>{
+  if(!window.ExcelJS)throw new Error('Excel library not loaded (check internet)');
+  const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Pokemon');
+  ws.columns=[{header:'Image',width:9},{header:'#',width:6},{header:'Name',width:22},{header:'Types',width:16},...SL.map(l=>({header:l,width:6})),{header:'BST',width:6},{header:'Abilities',width:32}];
+  ws.getRow(1).font={bold:true};
+  const pl=dataList();
+  for(let i=0;i<pl.length;i++){const p=pl[i],row=ws.addRow(['',p.dex,nm(p)+(p.est?' *':''),p.t.map(cap).join('/'),...p.s,p.bst,p.a.map(cap).join(', ')]);row.height=34;
+   try{const du=await toDataURL(IMG(p.img||p.id));const imgId=wb.addImage({base64:du,extension:'png'});ws.addImage(imgId,{tl:{col:0,row:row.number-1},ext:{width:34,height:34}})}catch(e){}}
+  const buf=await wb.xlsx.writeBuffer();dl(fn+'.xlsx',new Blob([buf]))});
+ $('#pf',root).onclick=()=>busy($('#pf',root),'Generating…',async()=>{
+  if(!window.jspdf)throw new Error('PDF library not loaded (check internet)');
+  const pl=dataList(),imgs={},key=p=>p.dex+'|'+nm(p);
+  await Promise.all(pl.map(p=>toDataURL(IMG(p.img||p.id)).then(d=>imgs[key(p)]=d).catch(()=>{})));
+  const d=new jspdf.jsPDF();d.setFontSize(16);d.text('Fazzcup Tournaments - '+title,14,15);
+  d.autoTable({head:[['Img','#','Name','Types',...SL,'BST','Abilities']],
+   body:pl.map(p=>['',p.dex,nm(p)+(p.est?' *':''),p.t.map(cap).join('/'),...p.s,p.bst,p.a.map(cap).join(', ')]),
+   startY:21,styles:{fontSize:7,minCellHeight:10},headStyles:{fillColor:[227,53,13]},columnStyles:{0:{cellWidth:10}},
+   didDrawCell:c=>{if(c.section==='body'&&c.column.index===0){const u=imgs[c.row.raw[1]+'|'+c.row.raw[2]];if(u)try{d.addImage(u,'PNG',c.cell.x+1,c.cell.y+1,8,8)}catch(e){}}}});
+  d.save(fn+'.pdf')});
+ if(cup.pickable){$('#md',root).onchange=e=>{mode=e.target.value;draw()};
+  $('#grid',root).onclick=e=>{const c=e.target.closest('.card');if(!c)return;const id=+c.dataset.id,p=DEX.find(x=>x.id===id),inn=ok0()(p);
+   const i=cup.inc.indexOf(id),x=cup.ex.indexOf(id);
+   if(inn){i>=0?cup.inc.splice(i,1):cup.ex.push(id)}else{x>=0?cup.ex.splice(x,1):cup.inc.push(id)}
+   save();draw()};
+  $('#eqA',root).onclick=()=>{const ok=ok0();root._list.forEach(p=>{if(!ok(p)){if(!cup.inc.includes(p.id))cup.inc.push(p.id);const xi=cup.ex.indexOf(p.id);if(xi>=0)cup.ex.splice(xi,1)}});save();draw()};
+  $('#eqN',root).onclick=()=>{const ok=ok0();root._list.forEach(p=>{if(ok(p)){if(!cup.ex.includes(p.id))cup.ex.push(p.id);const ii=cup.inc.indexOf(p.id);if(ii>=0)cup.inc.splice(ii,1)}});save();draw()}}
+ draw();
+}
+// ---------- views ----------
+const app=$('#app');
+function nav(a){$('#n1').style.display=$('#n2').style.display=a===-1?'none':'';$('#n1').classList.toggle('on',a==1);$('#n2').classList.toggle('on',a==2)}
+function dash(){nav(1);
+ app.innerHTML=`<h1>My Cups</h1><div class=row><button class=pri id=nw>+ New cup</button><button id=ex>Export</button><button id=im>Import</button><input type=file id=fi accept=.json hidden></div>
+ <div class=row><input id=pl placeholder="Paste a shared cup link here…" style="flex:1;min-width:220px"><button id=po>Open link</button></div><div class=cups id=cl></div>`;
+ $('#po').onclick=()=>{const v=$('#pl').value.trim();if(!v)return;const h=v.includes('#')?v.slice(v.indexOf('#')):v;if(!/^#\/view\//.test(h))return alert('That doesn\'t look like a Fazzcup share link.');location.hash=h.slice(1);route()};
+ const ok=cups.map(c=>DEX.filter(matcher(c)).length);
+ $('#cl').innerHTML=cups.map((c,i)=>`<div class=cup><h3>${esc(c.name)}</h3><p>${esc(c.desc)||'No description'}</p><b>${ok[i]}</b> Pokémon<div class=row><button class=pri data-o=${c.id}>Open</button><button data-d=${c.id}>Duplicate</button><button class="dng ghost" data-x=${c.id}>Delete</button></div></div>`).join('')||'<p>No cups yet — create one!</p>';
+ $('#nw').onclick=()=>{const c=mk('New Cup','');cups.push(c);save();location.hash='/cup/'+c.id};
+ $('#cl').onclick=e=>{const t=e.target.dataset;if(t.o)location.hash='/cup/'+t.o;
+  if(t.d){const c=cups.find(x=>x.id===t.d),n=JSON.parse(JSON.stringify(c));n.id=uid();n.name+=' (copy)';cups.push(n);save();dash()}
+  if(t.x&&confirm('Delete this cup?')){cups=cups.filter(x=>x.id!==t.x);save();dash()}};
+ $('#ex').onclick=()=>dl('pokemon-cups.json',JSON.stringify(cups,null,1));
+ $('#im').onclick=()=>$('#fi').click();
+ $('#fi').onchange=async e=>{try{const a=JSON.parse(await e.target.files[0].text());(Array.isArray(a)?a:[a]).forEach(c=>{c.id=uid();c.f={...defF(),...c.f};c.inc=c.inc||[];c.ex=c.ex||[];c.orig=c.orig||JSON.stringify({name:c.name,desc:c.desc,f:c.f,inc:c.inc,ex:c.ex});cups.push(c)});save();dash()}catch(x){alert('Invalid cup file')}};
+}
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function dl(n,t){const b=t instanceof Blob?t:new Blob([t],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;a.click()}
+function shareUrl(cup){const slugs=DEX.filter(matcher(cup)).map(p=>p.n);const data=btoa(unescape(encodeURIComponent(JSON.stringify({n:cup.name,s:slugs}))));return location.href.split('#')[0]+'#/view/'+data}
+function cupView(c){nav(0);
+ app.innerHTML=`<a href="#/">← All cups</a><input class="big" id=nm value="${esc(c.name)}" placeholder="Cup name"><textarea id=ds rows=2 placeholder="Description">${esc(c.desc)}</textarea>
+ <div class=row><button id=du>Duplicate</button><button id=rs>Reset to original</button><button id=ec>Export cup</button><button id=sh>🔗 Share link</button><button class="dng ghost" id=dc>Delete</button><span class=cnt>Changes save automatically</span></div><div id=br></div>`;
+ $('#nm').oninput=e=>{c.name=e.target.value;save()};$('#ds').oninput=e=>{c.desc=e.target.value;save()};
+ $('#du').onclick=()=>{const n=JSON.parse(JSON.stringify(c));n.id=uid();n.name+=' (copy)';cups.push(n);save();location.hash='/cup/'+n.id};
+ $('#dc').onclick=()=>{if(confirm('Delete this cup?')){cups=cups.filter(x=>x!==c);save();location.hash='/'}};
+ $('#rs').onclick=()=>{if(confirm('Reset filters and manual picks to the original?')){Object.assign(c,JSON.parse(c.orig));save();cupView(c)}};
+ $('#ec').onclick=()=>dl(c.name.replace(/\W+/g,'-')+'.json',JSON.stringify(c,null,1));
+ $('#sh').onclick=()=>{const u=shareUrl(c);navigator.clipboard&&navigator.clipboard.writeText(u).catch(()=>{});prompt('Share this link (copied if your browser allows it) — anyone can open or paste it to see a plain, view-only page listing this cup\'s Pokémon:',u)};
+ c.pickable=true;c.onchange=save;browser($('#br'),c);
+}
+function viewPage(name,slugs){nav(-1);
+ const mons=slugs.map(s=>DEX.find(p=>p.n===s)).filter(Boolean);
+ app.innerHTML=`<h1>${esc(name)}</h1>
+ <div class=grid>${mons.map(p=>`<div class="card" style="--c:${TC[p.t[0]]}"><img loading=lazy alt="" src="${IMG(p.img||p.id)}" onerror="this.style.opacity=.15"><b>${nm(p)}</b><small>#${String(p.dex).padStart(4,'0')}</small>${p.t.map(tpl).join('')}</div>`).join('')||'<p>No Pokémon found for this link.</p>'}</div>`;
+}
+const dexF={f:defF()};
+function dexView(){nav(2);app.innerHTML=`<h1>Pokédex</h1><div id=br></div>`;browser($('#br'),dexF)}
+function route(){const h=location.hash.slice(1)||'/',[,a,b]=h.split('/'),c=cups.find(x=>x.id===b);scrollTo(0,0);
+ if(a==='view'&&b){try{const d=JSON.parse(decodeURIComponent(escape(atob(b))));viewPage(d.n,d.s)}catch(e){app.innerHTML='<p>That link looks broken or incomplete.</p>'}return}
+ a==='dex'?dexView():a==='cup'&&c?cupView(c):dash()}
+$('#th').onclick=()=>{const d=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=d;localStorage.setItem('pcb-theme',d)};
+document.documentElement.dataset.theme=localStorage.getItem('pcb-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
+addEventListener('hashchange',route);
+loadDex().then(()=>{DEX=restrict(DEX);route()}).catch(e=>{app.innerHTML='<p>Could not load Pokémon data from PokéAPI. Check your internet connection and reload.</p>'});
+</script></body></html>
